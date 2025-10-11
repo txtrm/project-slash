@@ -28,7 +28,8 @@ public class Wallrunning : MonoBehaviour
     void LateUpdate()
     {
         if (!isTouchingWall)
-        isTouchingWall = false;    
+            Gmultiplier = 1f;
+        isTouchingWall = false;  
     }
 
     private void OnControllerColliderHit(ControllerColliderHit hit)
