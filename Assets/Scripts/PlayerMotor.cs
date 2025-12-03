@@ -4,6 +4,7 @@ using System.Threading;
 using Unity.VisualScripting;
 using UnityEngine;
 using DG.Tweening;
+using System.Runtime.CompilerServices;
 
 public class PlayerMotor : MonoBehaviour
 {
@@ -27,7 +28,17 @@ public class PlayerMotor : MonoBehaviour
     public float SprintMultiplier = 1.2f;
     public float CrouchMultiplier = 0.5f;
     public float CrouchTimer = 0f;
-    public float SlideForce = 10f;
+
+    // Sliding (Rigidbody-based)
+    public bool sliding = false;
+    public float slideDuration = 2f;
+    public float slideImpulse = 6f; // initial impulse when sliding starts
+    public float slideControlForce = 4f; // player input influence while sliding
+    public float slideDrag = 0.2f; // drag while sliding (lower -> longer slide)
+    private float originalDrag;
+    private float slideStartTime = 0f;
+    private CapsuleCollider capsule;
+    private float originalCapsuleHeight = 2f;
 
     public bool isSprinting;
     public bool isGrounded;
@@ -35,11 +46,15 @@ public class PlayerMotor : MonoBehaviour
     public bool isCrouching;
     public bool LerpCrouch;
 
+    private bool isCleared;
     private bool isTilted;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
+        capsule = GetComponent<CapsuleCollider>();
+        if (capsule != null) originalCapsuleHeight = capsule.height;
+        originalDrag = rb.drag;
         Cursor.lockState = CursorLockMode.Locked;
         SprintLinesP.SetActive(false);
         canJump = true;
@@ -108,12 +123,22 @@ public class PlayerMotor : MonoBehaviour
         // Sprint visuals
         if (isSprinting && !isCrouching)
         {
+            if (!isCleared)
+            {
+                SprintLines.Clear();
+                isCleared = true;
+            }
             SprintLinesP.SetActive(true);
-            if (!SprintLines.isPlaying) SprintLines.Play();
+            if (!SprintLines.isPlaying)
+            {
+                SprintLines.Play();
+            }
+                
         }
         else if (SprintLines.isPlaying && !isSprinting)
         {
             SprintLines.Stop();
+            isCleared = false;
         }
 
         // Bobbing
@@ -124,18 +149,14 @@ public class PlayerMotor : MonoBehaviour
 
         #endregion
 
-        slideDirection = transform.forward;
-
-        if (isSprinting && isCrouching)
+        // Sliding lifecycle
+        if (sliding)
         {
-            SlideForce -= Time.deltaTime * 8f;
-            rb.AddForce(slideDirection * SlideForce, ForceMode.Force);
-            if (SlideForce <= 0f)
-                SlideForce = 0f;
-        }
-        else
-        {
-            SlideForce = 15f;
+            // Stop sliding after duration
+            if (Time.time - slideStartTime >= slideDuration)
+            {
+                StopSlide();
+            }
         }
 
         if (isSprinting)
@@ -149,6 +170,15 @@ public class PlayerMotor : MonoBehaviour
 
     public void ProcessMove(Vector2 input)
     {
+        // Sliding: allow limited input influence but don't overwrite full velocity
+        if (sliding)
+        {
+            // small player control while sliding (forward influence stronger)
+            Vector3 control = transform.TransformDirection(new Vector3(input.x * 0.2f, 0f, input.y * 0.6f));
+            rb.AddForce(control * slideControlForce, ForceMode.Acceleration);
+            return;
+        }
+
         // Only wallrun if touching wall and NOT grounded
         if (wallrunning.isTouchingWall && !isGrounded && wallrunning.wallNormal != Vector3.zero)
         {
@@ -180,14 +210,51 @@ public class PlayerMotor : MonoBehaviour
             wallrunning.wallJumpUsed = true;
             wallrunning.hasWallJumped = true;
         }
+
+        // If jumping while sliding, stop the slide
+        if (sliding)
+        {
+            StopSlide();
+        }
     }
 
     public void Crouch()
     {
+        // If player is sprinting and grounded, start a slide instead of regular crouch
+        if (isSprinting && isGrounded && !sliding)
+        {
+            StartSlide();
+            return;
+        }
+
         isCrouching = !isCrouching;
         CrouchTimer = 0f;
         LerpCrouch = true;
-        // Adjust player scale or collider height here if needed
+    }
+
+    private void StartSlide()
+    {
+        sliding = true;
+        slideStartTime = Time.time;
+        isCrouching = true;
+        LerpCrouch = false; // snap to crouch height immediately
+        if (capsule != null) capsule.height = originalCapsuleHeight * 0.5f;
+        originalDrag = rb.drag;
+        rb.AddForce(transform.forward * slideImpulse, ForceMode.VelocityChange);
+        rb.drag = slideDrag;
+        // optional: play sprint/slide visuals
+        if (SprintLines != null && !SprintLines.isPlaying) SprintLines.Play();
+    }
+
+    private void StopSlide()
+    {
+        sliding = false;
+        rb.drag = originalDrag;
+        if (capsule != null) capsule.height = originalCapsuleHeight;
+        isCrouching = false;
+        LerpCrouch = true; // lerp back to standing
+        // stop sprint visuals if not sprinting
+        if (SprintLines != null && SprintLines.isPlaying && !isSprinting) SprintLines.Stop();
     }
 
     public void Sprint()
