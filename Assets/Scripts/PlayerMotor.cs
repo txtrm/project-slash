@@ -15,7 +15,7 @@ public class PlayerMotor : MonoBehaviour
     public Camera MainCam;
     public GameObject SprintLinesP;
     public ParticleSystem SprintLines;
-    public CharacterController controller;
+    public Rigidbody rb;
     public Vector3 slideDirection;
 
     private Vector3 playerVelocity;
@@ -39,10 +39,11 @@ public class PlayerMotor : MonoBehaviour
 
     void Start()
     {
-        controller = GetComponent<CharacterController>();
+        rb = GetComponent<Rigidbody>();
         Cursor.lockState = CursorLockMode.Locked;
         SprintLinesP.SetActive(false);
         canJump = true;
+        rb.freezeRotation = true;
     }
 
     void Update()
@@ -82,19 +83,21 @@ public class PlayerMotor : MonoBehaviour
         #endregion         
         #region Visual
 
-        if (canJump && !isGrounded)
-            wallrunning.Gmultiplier = 0.2f;
-        else
+        // Let Wallrunning script handle Gmultiplier - don't override it here
+        if (!wallrunning.isTouchingWall && !isGrounded)
             wallrunning.Gmultiplier = 1f;
 
-        // Handle crouch interpolation
+        // Handle crouch interpolation (using CapsuleCollider)
         if (LerpCrouch)
         {
             CrouchTimer += Time.deltaTime;
             float p = CrouchTimer / 1f;
             p *= p;
-            controller.height = Mathf.Lerp(controller.height, isCrouching ? 1f : 2f, p);
-
+            CapsuleCollider col = GetComponent<CapsuleCollider>();
+            if (col != null)
+            {
+                col.height = Mathf.Lerp(col.height, isCrouching ? 1f : 2f, p);
+            }
             if (p > 1f)
             {
                 LerpCrouch = false;
@@ -126,7 +129,7 @@ public class PlayerMotor : MonoBehaviour
         if (isSprinting && isCrouching)
         {
             SlideForce -= Time.deltaTime * 8f;
-            controller.Move(slideDirection * SlideForce * Time.deltaTime);
+            rb.AddForce(slideDirection * SlideForce, ForceMode.Force);
             if (SlideForce <= 0f)
                 SlideForce = 0f;
         }
@@ -140,44 +143,41 @@ public class PlayerMotor : MonoBehaviour
         else
             DoFov(60f);
 
-        // Speed logic
         float sprintSpeed = speed * (isSprinting ? SprintMultiplier : 1f);
         currentSpeed = sprintSpeed * (isCrouching ? CrouchMultiplier : 1f);
     }
 
     public void ProcessMove(Vector2 input)
     {
-        Vector3 moveDirection = new Vector3(input.x, 0, input.y);
-        controller.Move(transform.TransformDirection(moveDirection) * currentSpeed * Time.deltaTime);
-
-        // Apply gravity
-        playerVelocity.y += gravity * Time.deltaTime * wallrunning.Gmultiplier;
-        controller.Move(playerVelocity * Time.deltaTime);
-
-        // Reset vertical velocity when grounded
-        if (controller.isGrounded && playerVelocity.y < 0)
+        // Only wallrun if touching wall and NOT grounded
+        if (wallrunning.isTouchingWall && !isGrounded && wallrunning.wallNormal != Vector3.zero)
         {
-            playerVelocity.y = -2f;
-            isGrounded = true;
-            canJump = true;
-            wallrunning.hasWallJumped = false; // reset wall jump ability when grounded
+            Vector3 moveDir = transform.TransformDirection(new Vector3(0, 0, input.y));
+            Vector3 alongWall = Vector3.ProjectOnPlane(moveDir, wallrunning.wallNormal).normalized;
+            Vector3 velocity = alongWall * currentSpeed;
+            velocity.y = rb.velocity.y;
+            velocity.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
+            rb.velocity = velocity;
         }
         else
         {
-            isGrounded = false;
+            // Use normal movement if grounded or not wallrunning
+            Vector3 moveDirection = transform.TransformDirection(new Vector3(input.x, 0, input.y));
+            Vector3 velocity = moveDirection * currentSpeed;
+            velocity.y = rb.velocity.y;
+            velocity.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
+            rb.velocity = velocity;
         }
     }
 
     public void Jump()
     {
         if (!canJump) return;
-
-        playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+        rb.velocity = new Vector3(rb.velocity.x, Mathf.Sqrt(jumpHeight * -2f * gravity), rb.velocity.z);
         canJump = false;
-
-        // If this jump was from a wall, remember which one
-        if (!isGrounded && wallrunning.lastWall != null)
+        if (!isGrounded && wallrunning.isTouchingWall)
         {
+            wallrunning.wallJumpUsed = true;
             wallrunning.hasWallJumped = true;
         }
     }
@@ -187,6 +187,7 @@ public class PlayerMotor : MonoBehaviour
         isCrouching = !isCrouching;
         CrouchTimer = 0f;
         LerpCrouch = true;
+        // Adjust player scale or collider height here if needed
     }
 
     public void Sprint()
@@ -197,5 +198,32 @@ public class PlayerMotor : MonoBehaviour
     public void DoFov(float endvalue)
     {
         MainCam.DOFieldOfView(endvalue, 0.25f);
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (collision.gameObject.CompareTag("Ground"))
+        {
+            isGrounded = true;
+            canJump = true;
+            wallrunning.hasWallJumped = false;
+        }
+    }
+    
+    private void OnCollisionStay(Collision collision)
+    {
+        if (collision.gameObject.CompareTag("Ground"))
+        {
+            isGrounded = true;
+            canJump = true;
+        }
+    }
+    
+    private void OnCollisionExit(Collision collision)
+    {
+        if (collision.gameObject.CompareTag("Ground"))
+        {
+            isGrounded = false;
+        }
     }
 }

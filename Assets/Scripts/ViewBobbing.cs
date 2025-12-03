@@ -33,7 +33,8 @@ public class ViewBobbing : MonoBehaviour
     {
         float InputMagnitude = new Vector3(Input.GetAxis("Horizontal"), 0, Input.GetAxis("Vertical")).magnitude;
 
-        if (InputMagnitude > 0)
+        // Only bob if moving and Amount is greater than 0 (which is set to 0 in air by PlayerMotor)
+        if (InputMagnitude > 0 && Amount > 0)
         {
             StartHeadBob();
         }

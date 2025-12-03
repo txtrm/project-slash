@@ -51,5 +51,6 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "project slash.sln"
+    "dotnet.defaultSolution": "project slash.sln",
+    "dotnet.debug.suppressInvalidDebugTypeWarning": true
 }

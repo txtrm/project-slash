@@ -608,7 +608,7 @@ Transform:
   m_GameObject: {fileID: 374331892}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -18.35046, y: 0.099998474, z: -10.049324}
+  m_LocalPosition: {x: -18.35046, y: 0.099998474, z: -10.18}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -957,12 +957,12 @@ GameObject:
   - component: {fileID: 759780812}
   - component: {fileID: 759780811}
   - component: {fileID: 759780810}
-  - component: {fileID: 759780817}
   - component: {fileID: 759780816}
   - component: {fileID: 759780815}
   - component: {fileID: 759780818}
   - component: {fileID: 759780819}
   - component: {fileID: 759780820}
+  - component: {fileID: 759780821}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -977,7 +977,7 @@ CapsuleCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 759780808}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 13400000, guid: 954c33585184f49a28f11320b3bbda33, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -1091,46 +1091,21 @@ MonoBehaviour:
   MainCam: {fileID: 330585545}
   SprintLinesP: {fileID: 1986574333}
   SprintLines: {fileID: 1986574336}
-  controller: {fileID: 0}
+  rb: {fileID: 0}
   slideDirection: {x: 0, y: 0, z: 0}
   speed: 9
   currentSpeed: 0
   gravity: -12
-  jumpHeight: 1.2
+  jumpHeight: 3
   SprintMultiplier: 1.5
   CrouchMultiplier: 0.5
   CrouchTimer: 0
+  SlideForce: 10
   isSprinting: 0
   isGrounded: 0
   canJump: 0
   isCrouching: 0
   LerpCrouch: 0
---- !u!143 &759780817
-CharacterController:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 759780808}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Height: 2
-  m_Radius: 0.5
-  m_SlopeLimit: 45
-  m_StepOffset: 0.3
-  m_SkinWidth: 0.08
-  m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!114 &759780818
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1161,8 +1136,11 @@ MonoBehaviour:
   PM: {fileID: 759780816}
   tiltHolder: {fileID: 688553284}
   lastWall: {fileID: 0}
-  Gmultiplier: 1
+  wallNormal: {x: 0, y: 0, z: 0}
   hasWallJumped: 0
+  isTouchingWall: 0
+  wallJumpUsed: 0
+  Gmultiplier: 1
 --- !u!114 &759780820
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1177,6 +1155,33 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   PM: {fileID: 759780816}
   ForceTimer: 0.5
+--- !u!54 &759780821
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 759780808}
+  serializedVersion: 4
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 1
+  m_Constraints: 48
+  m_CollisionDetection: 1
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0

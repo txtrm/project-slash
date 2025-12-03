@@ -8,9 +8,11 @@ public class Wallrunning : MonoBehaviour
     public PlayerMotor PM;
     public Transform tiltHolder;
     public GameObject lastWall;
+    public Vector3 wallNormal;
 
     public bool hasWallJumped;
     public bool isTouchingWall;
+    public bool wallJumpUsed = false; // Track if jump was already used on current wall
 
     public float Gmultiplier = 1f;
 
@@ -29,33 +31,59 @@ public class Wallrunning : MonoBehaviour
     {
         if (!isTouchingWall)
             Gmultiplier = 1f;
-        isTouchingWall = false;  
     }
 
-    private void OnControllerColliderHit(ControllerColliderHit hit)
+    private void OnCollisionEnter(Collision collision)
     {
-        if (hit.gameObject.CompareTag("Ground"))
+        if (collision.gameObject.CompareTag("Ground"))
         {
             PM.isGrounded = true;
             PM.canJump = true;
             hasWallJumped = false;
             lastWall = null;
         }
-        
-        if (hit.gameObject.CompareTag("Wall"))
+
+        if (collision.gameObject.CompareTag("Wall"))
         {
             isTouchingWall = true;
-            Gmultiplier = 0.2f;
-            // Check if we touched a *different* wall
-            if (!PM.isGrounded && (!hasWallJumped || hit.gameObject != lastWall))
+            Gmultiplier = 0.03f; // Reduce gravity for slower slide
+            lastWall = collision.gameObject;
+            wallNormal = collision.contacts[0].normal;
+            // Reset wallJumpUsed when touching a new wall
+            wallJumpUsed = false;
+            if (!PM.isGrounded && (!hasWallJumped || collision.gameObject != lastWall))
             {
                 PM.canJump = true;
-                hasWallJumped = false; // reset so next wall jump is allowed
+                hasWallJumped = false;
             }
         }
-
-        lastWall = hit.gameObject;
-        isTouchingWall = false;
+    }
+    
+    private void OnCollisionStay(Collision collision)
+    {
+        if (collision.gameObject.CompareTag("Wall"))
+        {
+            isTouchingWall = true;
+            Gmultiplier = 0.03f;
+            lastWall = collision.gameObject;
+            wallNormal = collision.contacts[0].normal;
+            // Allow jump only if not already used on this wall
+            if (!PM.isGrounded && !wallJumpUsed)
+            {
+                PM.canJump = true;
+            }
+        }
+    }
+    
+    private void OnCollisionExit(Collision collision)
+    {
+        if (collision.gameObject.CompareTag("Wall"))
+        {
+            isTouchingWall = false;
+            Gmultiplier = 1f;
+            wallNormal = Vector3.zero;
+            wallJumpUsed = false; // Reset so next wall allows jumping again
+        }
     }
     
     public void DoTilt(float zTilt)
