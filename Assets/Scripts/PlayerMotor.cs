@@ -5,6 +5,7 @@ using Unity.VisualScripting;
 using UnityEngine;
 using DG.Tweening;
 using System.Runtime.CompilerServices;
+using UnityEditor.Experimental.GraphView;
 
 public class PlayerMotor : MonoBehaviour
 {
@@ -25,6 +26,10 @@ public class PlayerMotor : MonoBehaviour
     public float currentSpeed;
     public float gravity = -9.8f;
     public float jumpHeight = 2f;
+    [Tooltip("Horizontal speed applied when jumping off a wall (push away from wall)")]
+    public float wallJumpHorizontalSpeed = 6f;
+    [Tooltip("Multiplier for vertical jump speed when wall-jumping")]
+    public float wallJumpUpMultiplier = 1f;
     public float SprintMultiplier = 1.2f;
     public float CrouchMultiplier = 0.5f;
     public float CrouchTimer = 0f;
@@ -39,6 +44,9 @@ public class PlayerMotor : MonoBehaviour
     private float slideStartTime = 0f;
     private CapsuleCollider capsule;
     private float originalCapsuleHeight = 2f;
+    // Movement lock after jump so ProcessMove doesn't overwrite jump velocity
+    public float movementLockDuration = 0.12f;
+    private float movementLockTimer = 0f;
 
     public bool isSprinting;
     public bool isGrounded;
@@ -63,36 +71,45 @@ public class PlayerMotor : MonoBehaviour
 
     void Update()
     {
+        // Update movement lock timer
+        if (movementLockTimer > 0f)
+            movementLockTimer -= Time.deltaTime;
         #region Raycasts
 
-        if (Physics.Raycast(transform.position, transform.TransformDirection(Vector3.left), out RaycastHit hitinfoL, 1f, layerMask) && !isGrounded && !isTilted)
+        float rayDist = 1f;
+        Vector3 leftDir = transform.TransformDirection(Vector3.left);
+        Vector3 rightDir = transform.TransformDirection(Vector3.right);
+
+        bool leftHit = Physics.Raycast(transform.position, leftDir, out RaycastHit hitinfoL, rayDist, layerMask);
+        bool rightHit = Physics.Raycast(transform.position, rightDir, out RaycastHit hitinfoR, rayDist, layerMask);
+
+        // Draw rays once using the actual hit results
+        Debug.DrawRay(transform.position, leftDir * rayDist, leftHit ? Color.red : Color.green);
+        Debug.DrawRay(transform.position, rightDir * rayDist, rightHit ? Color.red : Color.green);
+
+        // Tilt only when airborne; use stored hit results
+        if (!isGrounded)
         {
-            Debug.DrawRay(transform.position, transform.TransformDirection(Vector3.left) * 1f, Color.red);
-            wallrunning.DoTilt(-15f);
-            isTilted = true;
+            if (leftHit && !isTilted)
+            {
+                wallrunning.DoTilt(-15f);
+                isTilted = true;
+            }
+            else if (rightHit && !isTilted)
+            {
+                wallrunning.DoTilt(15f);
+                isTilted = true;
+            }
+            else if (!leftHit && !rightHit && isTilted)
+            {
+                wallrunning.DoTilt(0f);
+                isTilted = false;
+            }
         }
-        else
-        {
-            Debug.DrawRay(transform.position, transform.TransformDirection(Vector3.left) * 1f, Color.green);
-        }
-        
-        if (!Physics.Raycast(transform.position, transform.TransformDirection(Vector3.left), 1f, layerMask) &&
-            !Physics.Raycast(transform.position, transform.TransformDirection(Vector3.right), 1f, layerMask) &&
-            isTilted)
+        else if (isTilted)
         {
             wallrunning.DoTilt(0f);
             isTilted = false;
-        }
-
-        if (Physics.Raycast(transform.position, transform.TransformDirection(Vector3.right), out RaycastHit hitinfoR, 1f, layerMask) && !isGrounded && !isTilted)
-        {
-            Debug.DrawRay(transform.position, transform.TransformDirection(Vector3.right) * 1f, Color.red);
-            wallrunning.DoTilt(15f);
-            isTilted = true;
-        }
-        else
-        {
-            Debug.DrawRay(transform.position, transform.TransformDirection(Vector3.right) * 1f, Color.green);
         }
 
         #endregion         
@@ -170,6 +187,14 @@ public class PlayerMotor : MonoBehaviour
 
     public void ProcessMove(Vector2 input)
     {
+        // If recently jumped, preserve current horizontal velocity and only apply gravity
+        if (movementLockTimer > 0f)
+        {
+            Vector3 v = rb.velocity;
+            v.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
+            rb.velocity = v;
+            return;
+        }
         // Sliding: allow limited input influence but don't overwrite full velocity
         if (sliding)
         {
@@ -203,14 +228,39 @@ public class PlayerMotor : MonoBehaviour
     public void Jump()
     {
         if (!canJump) return;
-        rb.velocity = new Vector3(rb.velocity.x, Mathf.Sqrt(jumpHeight * -2f * gravity), rb.velocity.z);
-        canJump = false;
-        if (!isGrounded && wallrunning.isTouchingWall)
+        // Prevent repeated wall-jumps on the same wall: if we've already used the wall jump
+        // while still touching this wall, disallow another jump until we touch ground or a different wall.
+        if (wallrunning != null && wallrunning.isTouchingWall && !isGrounded && wallrunning.wallJumpUsed)
         {
+            return;
+        }
+        Vector3 dir = new Vector3(rb.velocity.x, Mathf.Sqrt(jumpHeight * -2f * gravity), rb.velocity.z);
+        canJump = false;
+        if (wallrunning != null && wallrunning.isTouchingWall && !isGrounded && wallrunning.wallNormal != Vector3.zero)
+        {
+            // Mark used
             wallrunning.wallJumpUsed = true;
+            // remember the wall normal we jumped from so we can ignore re-contacts
+            wallrunning.lastWallNormal = wallrunning.wallNormal;
+            // remember the exact GameObject we jumped from so re-contacts
+            // with the same object while airborne can be ignored
+            wallrunning.lastUsedWall = wallrunning.lastWall;
             wallrunning.hasWallJumped = true;
+
+            // Horizontal push directly away from the wall (plane normal points outward)
+            Vector3 horizontalPush = wallrunning.wallNormal.normalized * wallJumpHorizontalSpeed;
+
+            // Vertical speed from jumpHeight (optionally scaled)
+            float verticalSpeed = Mathf.Sqrt(jumpHeight * -2f * gravity) * wallJumpUpMultiplier;
+
+            // Combine into final velocity
+            dir = new Vector3(horizontalPush.x, verticalSpeed, horizontalPush.z);
         }
 
+        rb.velocity = dir;
+        // lock movement for a short time so ProcessMove won't overwrite our horizontal jump impulse
+        movementLockTimer = movementLockDuration;
+        Debug.Log(rb.velocity);
         // If jumping while sliding, stop the slide
         if (sliding)
         {
@@ -273,7 +323,11 @@ public class PlayerMotor : MonoBehaviour
         {
             isGrounded = true;
             canJump = true;
-            wallrunning.hasWallJumped = false;
+            if (wallrunning != null)
+            {
+                wallrunning.ResetWallJumpState();
+                wallrunning.hasWallJumped = false;
+            }
         }
     }
     
