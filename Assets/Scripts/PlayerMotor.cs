@@ -6,47 +6,65 @@ using UnityEngine;
 using DG.Tweening;
 using System.Runtime.CompilerServices;
 using UnityEditor.Experimental.GraphView;
+using TMPro;
 
 public class PlayerMotor : MonoBehaviour
 {
-    [SerializeField] LayerMask layerMask;
+    
 
-    public ViewBobbing viewBobbing;
-    public Wallrunning wallrunning;
 
-    public Camera MainCam;
-    public GameObject SprintLinesP;
-    public ParticleSystem SprintLines;
-    public Rigidbody rb;
-    public Vector3 slideDirection;
+        [Header("References")] [Space(2)]
+        [SerializeField] LayerMask layerMask;
+        public ViewBobbing viewBobbing;
+        public Wallrunning wallrunning;
+        public Camera MainCam;
+        public GameObject SprintLinesP;
+        public ParticleSystem SprintLines;
+        public Rigidbody rb;
+        public Vector3 slideDirection;
+        public TMP_Text speedText;
 
-    private Vector3 playerVelocity;
+        private Vector3 playerVelocity;
 
-    public float speed = 9f;
-    public float currentSpeed;
-    public float gravity = -9.8f;
-    public float jumpHeight = 2f;
-    [Tooltip("Horizontal speed applied when jumping off a wall (push away from wall)")]
-    public float wallJumpHorizontalSpeed = 6f;
-    [Tooltip("Multiplier for vertical jump speed when wall-jumping")]
-    public float wallJumpUpMultiplier = 1f;
-    public float SprintMultiplier = 1.2f;
-    public float CrouchMultiplier = 0.5f;
-    public float CrouchTimer = 0f;
+        [Space(6)] [Header("Movement")]
+        public float speed = 9f;
+        public float currentSpeed;
+        public float SprintMultiplier = 1.2f;
+        public float CrouchMultiplier = 0.5f;
+        public float CrouchTimer = 0f;
 
-    // Sliding (Rigidbody-based)
-    public bool sliding = false;
-    public float slideDuration = 2f;
-    public float slideImpulse = 6f; // initial impulse when sliding starts
-    public float slideControlForce = 4f; // player input influence while sliding
-    public float slideDrag = 0.2f; // drag while sliding (lower -> longer slide)
-    private float originalDrag;
-    private float slideStartTime = 0f;
-    private CapsuleCollider capsule;
-    private float originalCapsuleHeight = 2f;
-    // Movement lock after jump so ProcessMove doesn't overwrite jump velocity
-    public float movementLockDuration = 0.12f;
-    private float movementLockTimer = 0f;
+        [Space(6)] [Header("Jumping & Gravity")]
+        public float gravity = -9.8f;
+        public float jumpHeight = 2f;
+        [Tooltip("Horizontal speed applied when jumping off a wall (push away from wall)")]
+        public float wallJumpHorizontalSpeed = 6f;
+        [Tooltip("Multiplier for vertical jump speed when wall-jumping")]
+        public float wallJumpUpMultiplier = 1f;
+
+        [Space(6)] [Header("Sliding")]
+        // Sliding (Rigidbody-based)
+        public bool sliding = false;
+        public float slideDuration = 2f;
+        public float slideImpulse = 12f; // initial impulse when sliding starts
+        public float slideControlForce = 4f; // player input influence while sliding
+        public float slideDrag = 0.2f; // drag while sliding (lower -> longer slide)
+        private float originalDrag;
+        private float slideStartTime = 0f;
+        private CapsuleCollider capsule;
+        private float originalCapsuleHeight = 2f;
+
+        [Space(6)] [Header("Control & Tuning")]
+        // Movement lock after jump so ProcessMove doesn't overwrite jump velocity
+        public float movementLockDuration = 0.12f;
+        private float movementLockTimer = 0f;
+
+        [Tooltip("How much control player has while airborne (0 = no control, 1 = full control)")]
+        public float airControlMultiplier = 0.6f;
+
+        [Tooltip("Acceleration applied when trying to change horizontal velocity (ground)")]
+        public float groundAccel = 50f;
+        [Tooltip("Acceleration applied when trying to change horizontal velocity (air)")]
+        public float airAccel = 8f;
 
     public bool isSprinting;
     public bool isGrounded;
@@ -67,10 +85,17 @@ public class PlayerMotor : MonoBehaviour
         SprintLinesP.SetActive(false);
         canJump = true;
         rb.freezeRotation = true;
+        speed = 12f;
+        SprintMultiplier = 2f;
+        gravity = -25f;
+        jumpHeight = 5f;
+        slideImpulse = 12f;
     }
 
     void Update()
     {
+        UpdateSpeedUI();
+
         // Update movement lock timer
         if (movementLockTimer > 0f)
             movementLockTimer -= Time.deltaTime;
@@ -185,6 +210,13 @@ public class PlayerMotor : MonoBehaviour
         currentSpeed = sprintSpeed * (isCrouching ? CrouchMultiplier : 1f);
     }
 
+    void UpdateSpeedUI()
+    {
+        if (speedText == null || rb == null) return;
+        float horizSpeed = new Vector3(rb.velocity.x, 0f, rb.velocity.z).magnitude;
+        speedText.text = $"{horizSpeed:0.0} m/s";
+    }
+
     public void ProcessMove(Vector2 input)
     {
         // If recently jumped, preserve current horizontal velocity and only apply gravity
@@ -195,6 +227,7 @@ public class PlayerMotor : MonoBehaviour
             rb.velocity = v;
             return;
         }
+
         // Sliding: allow limited input influence but don't overwrite full velocity
         if (sliding)
         {
@@ -204,24 +237,59 @@ public class PlayerMotor : MonoBehaviour
             return;
         }
 
-        // Only wallrun if touching wall and NOT grounded
+        // Current horizontal velocity (remove vertical)
+        Vector3 horizVel = rb.velocity;
+        horizVel.y = 0f;
+
+        // Desired horizontal from input in local space
+        Vector3 desiredInput = new Vector3(input.x, 0f, input.y);
+        float inputMag = desiredInput.magnitude;
+
+        // Wallrunning: project movement along wall plane
         if (wallrunning.isTouchingWall && !isGrounded && wallrunning.wallNormal != Vector3.zero)
         {
             Vector3 moveDir = transform.TransformDirection(new Vector3(0, 0, input.y));
-            Vector3 alongWall = Vector3.ProjectOnPlane(moveDir, wallrunning.wallNormal).normalized;
-            Vector3 velocity = alongWall * currentSpeed;
-            velocity.y = rb.velocity.y;
-            velocity.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
-            rb.velocity = velocity;
+            Vector3 alongWall = Vector3.ProjectOnPlane(moveDir, wallrunning.wallNormal);
+            Vector3 desiredHoriz = (alongWall.sqrMagnitude > 0.001f) ? alongWall.normalized * (inputMag > 0.01f ? currentSpeed : horizVel.magnitude) : horizVel;
+
+            // If there's input, accelerate toward desired; if no input, preserve horizVel
+            float accel = isGrounded ? groundAccel : airAccel * airControlMultiplier;
+            Vector3 accelVec = (desiredHoriz - horizVel) * accel * Time.deltaTime;
+            rb.AddForce(accelVec, ForceMode.VelocityChange);
+
+            // apply gravity separately
+            Vector3 v = rb.velocity;
+            v.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
+            rb.velocity = v;
+            return;
+        }
+
+        // Normal movement path
+        Vector3 desiredMoveWorld = transform.TransformDirection(desiredInput);
+        Vector3 desiredHorizontal = (desiredMoveWorld.sqrMagnitude > 0.001f) ? desiredMoveWorld.normalized * (inputMag > 0.01f ? currentSpeed : horizVel.magnitude) : horizVel;
+
+        if (isGrounded)
+        {
+            // On ground, directly control velocity for responsive movement
+            Vector3 newVel = desiredHorizontal;
+            newVel.y = rb.velocity.y;
+            // still apply gravity multiplier on y
+            newVel.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
+            rb.velocity = newVel;
         }
         else
         {
-            // Use normal movement if grounded or not wallrunning
-            Vector3 moveDirection = transform.TransformDirection(new Vector3(input.x, 0, input.y));
-            Vector3 velocity = moveDirection * currentSpeed;
-            velocity.y = rb.velocity.y;
-            velocity.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
-            rb.velocity = velocity;
+            // In air: if input present, accelerate toward desired; if no input, preserve momentum
+            if (inputMag > 0.01f)
+            {
+                float accel = airAccel * airControlMultiplier;
+                Vector3 accelVec = (desiredHorizontal - horizVel) * accel * Time.deltaTime;
+                rb.AddForce(accelVec, ForceMode.VelocityChange);
+            }
+            // apply gravity
+            Vector3 v = rb.velocity;
+            v.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
+            rb.velocity = v;
         }
     }
 
@@ -267,9 +335,13 @@ public class PlayerMotor : MonoBehaviour
             StopSlide();
         }
     }
+#region Crouching and Sliding
 
     public void Crouch()
     {
+        // Don't allow initiating crouch or slide while in the air
+        if (!isGrounded) return;
+
         // If player is sprinting and grounded, start a slide instead of regular crouch
         if (isSprinting && isGrounded && !sliding)
         {
@@ -284,6 +356,9 @@ public class PlayerMotor : MonoBehaviour
 
     private void StartSlide()
     {
+        // Safety: only start a slide if grounded
+        if (!isGrounded) return;
+
         sliding = true;
         slideStartTime = Time.time;
         isCrouching = true;
@@ -306,6 +381,8 @@ public class PlayerMotor : MonoBehaviour
         // stop sprint visuals if not sprinting
         if (SprintLines != null && SprintLines.isPlaying && !isSprinting) SprintLines.Stop();
     }
+
+#endregion
 
     public void Sprint()
     {
