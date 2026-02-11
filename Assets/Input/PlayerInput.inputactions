@@ -49,6 +49,15 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "Attack",
+                    "type": "Button",
+                    "id": "f766307e-a726-4301-906b-e0753f7e3852",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -307,8 +316,8 @@
                 },
                 {
                     "name": "",
-                    "id": "e23371de-9e41-4ca7-a1b8-096bf4cc0f16",
-                    "path": "<Gamepad>/rightStickPress",
+                    "id": "60895137-8f20-42f3-b0f8-3e249d4be2c6",
+                    "path": "<Gamepad>/buttonEast",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
@@ -318,12 +327,23 @@
                 },
                 {
                     "name": "",
-                    "id": "60895137-8f20-42f3-b0f8-3e249d4be2c6",
-                    "path": "<Gamepad>/buttonEast",
+                    "id": "880a1847-2e9a-44d4-b36d-7b4f438f3703",
+                    "path": "<Mouse>/leftButton",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "CrouchSlide",
+                    "action": "Attack",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "559ba0bf-c839-4a8b-806e-076625115afd",
+                    "path": "<Gamepad>/rightTrigger",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Attack",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

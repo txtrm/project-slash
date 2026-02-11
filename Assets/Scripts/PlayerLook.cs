@@ -1,58 +1,43 @@
-using System.Collections;
-using System.Collections.Generic;
-using Unity.Mathematics;
 using UnityEngine;
 
 public class PlayerLook : MonoBehaviour
 {
     public Camera cam;
 
-    private float xRotation = 0f;
-
-    public float xSens = 30f;
-    public float ySens = 30f;
-    [Tooltip("Scale applied to raw mouse delta (pixels). Separate X/Y multipliers let you tune horizontal and vertical sensitivity independently.")]
-    public float mouseXMultiplier = 0.002f;
-    public float mouseYMultiplier = 0.004f;
-    [Tooltip("Clamp maximum degrees change from mouse in a single frame to avoid spikes.")]
+    public float xSens = 150f; // left/right
+    public float ySens = 120f; // up/down
     public float maxMouseDelta = 8f;
 
+    private float xRotation = 0f;
+
+    // Store latest input for use in LateUpdate
+    private Vector2 latestInput = Vector2.zero;
+
+    // Called by InputManager to update look input
     public void ProcessLook(Vector2 input)
     {
-        float mouseX = input.x;
-        float mouseY = input.y;
+        latestInput = input;
+        Debug.Log($"ProcessLook called with input: {input} at frame {Time.frameCount}");
+    }
 
-        // Detect likely mouse (large deltas) vs gamepad stick (small -1..1 values)
-        bool isMouse = Mathf.Abs(mouseX) > 1f || Mathf.Abs(mouseY) > 1f;
+    void LateUpdate()
+    {
+        // Use latest input to update camera rotation
+        float mouseX = latestInput.x;
+        float mouseY = latestInput.y;
 
-        float deltaX;
-        float deltaY;
+        float deltaX = mouseX * xSens * Time.deltaTime;
+        float deltaY = mouseY * ySens * Time.deltaTime;
 
-        if (isMouse)
-        {
-            // Mouse delta is in pixels/frame — scale using per-axis multipliers
-            deltaX = mouseX * xSens * mouseXMultiplier;
-            deltaY = mouseY * ySens * mouseYMultiplier;
+        deltaX = Mathf.Clamp(deltaX, -maxMouseDelta, maxMouseDelta);
+        deltaY = Mathf.Clamp(deltaY, -maxMouseDelta, maxMouseDelta);
 
-            // Clamp to avoid huge single-frame jumps from mouse (e.g., jitter or raw input spikes)
-            deltaX = Mathf.Clamp(deltaX, -maxMouseDelta, maxMouseDelta);
-            deltaY = Mathf.Clamp(deltaY, -maxMouseDelta, maxMouseDelta);
-        }
-        else
-        {
-            // Gamepad stick provides -1..1; multiply by sensitivity (deg/sec) and frame time
-            deltaX = mouseX * xSens * Time.deltaTime;
-            deltaY = mouseY * ySens * Time.deltaTime;
-        }
-
-        // calculate camera rotation for looking up and down (degrees)
+        // Vertical look (camera)
         xRotation -= deltaY;
         xRotation = Mathf.Clamp(xRotation, -80f, 80f);
-
-        // apply to camera transform
         cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
 
-        // rotate player to look right and left
+        // Horizontal look (player)
         transform.Rotate(Vector3.up * deltaX);
     }
 }

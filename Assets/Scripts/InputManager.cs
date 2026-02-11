@@ -29,11 +29,6 @@ public class InputManager : MonoBehaviour
         motor.ProcessMove(onFoot.Movement.ReadValue<Vector2>());
     }
 
-    void LateUpdate()
-    {
-        look.ProcessLook(onFoot.Look.ReadValue<Vector2>());
-    }
-
     private void OnEnable()
     {
         onFoot.Enable();
@@ -55,6 +50,16 @@ public class InputManager : MonoBehaviour
         {
             if (moveInput != Vector2.zero)
                 motor.isSprinting = true; // only sprint if moving
+        };
+
+        // Listen for look input and pass to PlayerLook
+        onFoot.Look.performed += ctx =>
+        {
+            look.ProcessLook(ctx.ReadValue<Vector2>());
+        };
+        onFoot.Look.canceled += ctx =>
+        {
+            look.ProcessLook(Vector2.zero);
         };
     }
     

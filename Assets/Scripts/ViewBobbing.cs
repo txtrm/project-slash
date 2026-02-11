@@ -13,46 +13,51 @@ public class ViewBobbing : MonoBehaviour
     [Range(1f, 30f)]
     public float Frequency = 10.0f;
 
-    [Range(10f, 100f)]
+    [Range(0f, 100f)]
     public float Smooth = 10.0f;
 
     Vector3 StartPos;
+    [HideInInspector]
+    public float moveAmount;
 
     void Start()
     {
         StartPos = transform.localPosition;
     }
 
-    void Update()
+    void LateUpdate()
     {
         CheckForHeadBobTrigger();
         StopHeadBob();
     }
-
-    private void CheckForHeadBobTrigger()
+    
+    public void CheckForHeadBobTrigger()
     {
-        float InputMagnitude = new Vector3(Input.GetAxis("Horizontal"), 0, Input.GetAxis("Vertical")).magnitude;
-
-        // Only bob if moving and Amount is greater than 0 (which is set to 0 in air by PlayerMotor)
-        if (InputMagnitude > 0 && Amount > 0)
+        if (moveAmount > 0.1f && Amount > 0f)
         {
             StartHeadBob();
         }
     }
 
-    private Vector3 StartHeadBob()
+    private void StartHeadBob()
     {
-        Vector3 pos = Vector3.zero;
-        pos.y += Mathf.Lerp(pos.y, Mathf.Sin(Time.time * Frequency) * Amount * 1.4f, Smooth * Time.deltaTime);
-        pos.x += Mathf.Lerp(pos.x, Mathf.Cos(Time.time * Frequency / 2f) * Amount * 1.6f, Smooth * Time.deltaTime);
-        transform.localPosition += pos;
+        float y = Mathf.Sin(Time.time * Frequency) * Amount * 1.4f;
+        float x = Mathf.Cos(Time.time * Frequency / 2f) * Amount * 1.6f;
 
-        return pos;
+        Vector3 targetPos = StartPos + new Vector3(x, y, 0);
+        transform.localPosition = Vector3.Lerp(
+            transform.localPosition,
+            targetPos,
+            Smooth * Time.deltaTime
+        );
     }
 
     private void StopHeadBob()
     {
-        if (transform.localPosition == StartPos) return;
-        transform.localPosition = Vector3.Lerp(transform.localPosition, StartPos, 1 * Time.deltaTime);
+        transform.localPosition = Vector3.Lerp(
+            transform.localPosition,
+            StartPos,
+            Smooth * Time.deltaTime
+        );
     }
 }

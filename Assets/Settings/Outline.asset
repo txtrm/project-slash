@@ -1,6 +1,35 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!114 &-1878332245247344467
+--- !u!114 &-7467072778233512337
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 177ddeadd26a80641ad757c51fb7f5d1, type: 3}
+  m_Name: OutlineFxFeature
+  m_EditorClassIdentifier: 
+  m_Active: 1
+  _event: 600
+  _solid: 0
+  _thickness: 0.214
+  _alphaCutout: 0.59
+  _mode: 0
+  _filter: 1
+  _attachDepth: 1
+  _output:
+    enabled: 0
+    value: _globalTex
+  _solidMask:
+    _enabled: 0
+    _pattern: {fileID: 2800000, guid: 41acea03acbaebe4a9dc26dd8264449e, type: 3}
+    _scale: 50
+    _velocity: {x: 0, y: 0}
+  _shader: {fileID: 4800000, guid: 9a902e6d68fe8344890c5926c684e820, type: 3}
+--- !u!114 &-1440900272573469361
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -10,19 +39,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f62c9c65cf3354c93be831c8bc075510, type: 3}
-  m_Name: SSAO
+  m_Name: ScreenSpaceAmbientOcclusion
   m_EditorClassIdentifier: 
   m_Active: 1
   m_Settings:
-    AOMethod: 1
+    AOMethod: 0
     Downsample: 0
     AfterOpaque: 0
     Source: 1
     NormalSamples: 1
-    Intensity: 0.5
+    Intensity: 3
     DirectLightingStrength: 0.25
-    Radius: 0.25
-    Samples: 0
+    Radius: 0.035
+    Samples: 1
     BlurQuality: 0
     Falloff: 100
     SampleCount: -1
@@ -52,9 +81,9 @@ MonoBehaviour:
       type: 3}
     hdrDebugViewPS: {fileID: 4800000, guid: 573620ae32aec764abd4d728906d2587, type: 3}
   m_RendererFeatures:
-  - {fileID: -1878332245247344467}
-  - {fileID: 4030500676582473506}
-  m_RendererFeatureMap: adc0de57c6d2eee5227fabc60237ef37
+  - {fileID: -1440900272573469361}
+  - {fileID: -7467072778233512337}
+  m_RendererFeatureMap: 4fad7e18d6e400ec6ffe66d5dea05f98
   m_UseNativeRenderPass: 0
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
   xrSystemData: {fileID: 11400000, guid: 60e1133243b97e347b653163a8c01b64, type: 2}
@@ -97,17 +126,3 @@ MonoBehaviour:
   m_CopyDepthMode: 0
   m_AccurateGbufferNormals: 0
   m_IntermediateTextureMode: 1
---- !u!114 &4030500676582473506
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ee2b288660c364b698d0c8996bf93574, type: 3}
-  m_Name: OutlineFeature
-  m_EditorClassIdentifier: 
-  m_Active: 1
-  outlineMaterial: {fileID: 2100000, guid: 9130389b82863417ca0a0e967a2b71d5, type: 2}

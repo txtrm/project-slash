@@ -10,9 +10,8 @@ using TMPro;
 
 public class PlayerMotor : MonoBehaviour
 {
+
     
-
-
         [Header("References")] [Space(2)]
         [SerializeField] LayerMask layerMask;
         public ViewBobbing viewBobbing;
@@ -25,9 +24,14 @@ public class PlayerMotor : MonoBehaviour
         public TMP_Text speedText;
 
         private Vector3 playerVelocity;
+        // Target horizontal velocity computed from input; applied in FixedUpdate via MovePosition
+        private Vector3 targetHorizontalVelocity = Vector3.zero;
+        private Vector2 cachedInput = Vector2.zero;
+        // Whether horizontal MovePosition logic is enabled. Disabled during physics-driven sliding.
+        // private bool movePositionEnabled = true;
 
         [Space(6)] [Header("Movement")]
-        public float speed = 9f;
+        public float speed = 6f;
         public float currentSpeed;
         public float SprintMultiplier = 1.2f;
         public float CrouchMultiplier = 0.5f;
@@ -44,10 +48,15 @@ public class PlayerMotor : MonoBehaviour
         [Space(6)] [Header("Sliding")]
         // Sliding (Rigidbody-based)
         public bool sliding = false;
-        public float slideDuration = 2f;
-        public float slideImpulse = 12f; // initial impulse when sliding starts
+        public float slideDuration = 0.45f;
+        public float slideImpulse = 32f; // initial impulse when sliding starts
         public float slideControlForce = 4f; // player input influence while sliding
-        public float slideDrag = 0.2f; // drag while sliding (lower -> longer slide)
+        public float slideDrag = 0f; // drag while sliding (lower -> longer slide)
+        [Tooltip("Horizontal velocity multiplier applied when stopping a slide (0 = zero horizontal momentum)")]
+        public float slideStopMultiplier = 0.001f;
+        [Tooltip("Duration over which horizontal velocity is damped when stopping a slide")]
+        public float slideStopDuration = 0.08f;
+        private Coroutine slideStopCoroutine = null;
         private float originalDrag;
         private float slideStartTime = 0f;
         private CapsuleCollider capsule;
@@ -55,8 +64,9 @@ public class PlayerMotor : MonoBehaviour
 
         [Space(6)] [Header("Control & Tuning")]
         // Movement lock after jump so ProcessMove doesn't overwrite jump velocity
-        public float movementLockDuration = 0.12f;
+        public float movementLockDuration = 0.2f;
         private float movementLockTimer = 0f;
+        private float currentFovTarget = -1f;
 
         [Tooltip("How much control player has while airborne (0 = no control, 1 = full control)")]
         public float airControlMultiplier = 0.6f;
@@ -85,11 +95,16 @@ public class PlayerMotor : MonoBehaviour
         SprintLinesP.SetActive(false);
         canJump = true;
         rb.freezeRotation = true;
-        speed = 12f;
-        SprintMultiplier = 2f;
+        speed = 6f;
+        slideStopMultiplier = 0.001f;
+        SprintMultiplier = 1.5f;
+        slideDuration = 0.45f;
         gravity = -25f;
-        jumpHeight = 5f;
-        slideImpulse = 12f;
+        jumpHeight = 3.3f;
+        slideStopDuration = 0.08f;
+        slideImpulse = 32f;
+        wallJumpHorizontalSpeed = 10f;
+        slideDrag = 0f;
     }
 
     void Update()
@@ -219,48 +234,45 @@ public class PlayerMotor : MonoBehaviour
 
     public void ProcessMove(Vector2 input)
     {
+        // Cache the input; actual movement applied in FixedUpdate via MovePosition
+        cachedInput = input;
+
         // If recently jumped, preserve current horizontal velocity and only apply gravity
         if (movementLockTimer > 0f)
         {
-            Vector3 v = rb.velocity;
-            v.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
-            rb.velocity = v;
+            targetHorizontalVelocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
             return;
         }
 
-        // Sliding: allow limited input influence but don't overwrite full velocity
+        // Sliding still uses forces (keep existing behavior)
         if (sliding)
         {
-            // small player control while sliding (forward influence stronger)
+            // Player has limited control while sliding; add input-based influence
             Vector3 control = transform.TransformDirection(new Vector3(input.x * 0.2f, 0f, input.y * 0.6f));
             rb.AddForce(control * slideControlForce, ForceMode.Acceleration);
+            // keep targetHorizontalVelocity at current horizontal velocity so MovePosition doesn't fight physics
+            targetHorizontalVelocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
             return;
         }
 
-        // Current horizontal velocity (remove vertical)
+        // Compute current horizontal velocity
         Vector3 horizVel = rb.velocity;
         horizVel.y = 0f;
 
-        // Desired horizontal from input in local space
+        // Desired horizontal from input
         Vector3 desiredInput = new Vector3(input.x, 0f, input.y);
         float inputMag = desiredInput.magnitude;
 
-        // Wallrunning: project movement along wall plane
+        // Wallrunning: compute desired velocity along wall plane
         if (wallrunning.isTouchingWall && !isGrounded && wallrunning.wallNormal != Vector3.zero)
         {
             Vector3 moveDir = transform.TransformDirection(new Vector3(0, 0, input.y));
             Vector3 alongWall = Vector3.ProjectOnPlane(moveDir, wallrunning.wallNormal);
             Vector3 desiredHoriz = (alongWall.sqrMagnitude > 0.001f) ? alongWall.normalized * (inputMag > 0.01f ? currentSpeed : horizVel.magnitude) : horizVel;
 
-            // If there's input, accelerate toward desired; if no input, preserve horizVel
-            float accel = isGrounded ? groundAccel : airAccel * airControlMultiplier;
-            Vector3 accelVec = (desiredHoriz - horizVel) * accel * Time.deltaTime;
-            rb.AddForce(accelVec, ForceMode.VelocityChange);
-
-            // apply gravity separately
-            Vector3 v = rb.velocity;
-            v.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
-            rb.velocity = v;
+            // Interpolate towards desired (instant on ground, partial in air)
+            float t = isGrounded ? 1f : airControlMultiplier;
+            targetHorizontalVelocity = Vector3.Lerp(horizVel, desiredHoriz, t);
             return;
         }
 
@@ -268,29 +280,45 @@ public class PlayerMotor : MonoBehaviour
         Vector3 desiredMoveWorld = transform.TransformDirection(desiredInput);
         Vector3 desiredHorizontal = (desiredMoveWorld.sqrMagnitude > 0.001f) ? desiredMoveWorld.normalized * (inputMag > 0.01f ? currentSpeed : horizVel.magnitude) : horizVel;
 
-        if (isGrounded)
+        float interp = isGrounded ? 1f : airControlMultiplier;
+        targetHorizontalVelocity = Vector3.Lerp(horizVel, desiredHorizontal, interp);
+    }
+
+    void FixedUpdate()
+    {
+        float dt = Time.fixedDeltaTime;
+
+        // If sliding, let forces handle movement; still apply gravity manually
+        if (sliding)
         {
-            // On ground, directly control velocity for responsive movement
-            Vector3 newVel = desiredHorizontal;
-            newVel.y = rb.velocity.y;
-            // still apply gravity multiplier on y
-            newVel.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
-            rb.velocity = newVel;
+            Vector3 vSlide = rb.velocity;
+            vSlide.y += gravity * wallrunning.Gmultiplier * dt;
+            rb.velocity = vSlide;
+            // update view bobbing from actual horizontal movement
+            Vector3 horizMove = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+            viewBobbing.moveAmount = horizMove.magnitude;
+            return;
         }
-        else
-        {
-            // In air: if input present, accelerate toward desired; if no input, preserve momentum
-            if (inputMag > 0.01f)
-            {
-                float accel = airAccel * airControlMultiplier;
-                Vector3 accelVec = (desiredHorizontal - horizVel) * accel * Time.deltaTime;
-                rb.AddForce(accelVec, ForceMode.VelocityChange);
-            }
-            // apply gravity
-            Vector3 v = rb.velocity;
-            v.y += gravity * wallrunning.Gmultiplier * Time.deltaTime;
-            rb.velocity = v;
-        }
+
+        // Apply horizontal movement via MovePosition
+        Vector3 oldPos = rb.position;
+        Vector3 displacement = targetHorizontalVelocity * dt;
+        Vector3 newPos = oldPos + displacement;
+        rb.MovePosition(newPos);
+
+        // Calculate actual horizontal velocity achieved (accounts for collisions)
+        Vector3 actualHoriz = (rb.position - oldPos) / dt;
+        actualHoriz.y = 0f;
+
+        // Apply gravity to vertical velocity manually
+        float vert = rb.velocity.y;
+        vert += gravity * wallrunning.Gmultiplier * dt;
+
+        // Set the Rigidbody velocity: keep horizontal from MovePosition, set vertical from gravity
+        rb.velocity = new Vector3(actualHoriz.x, vert, actualHoriz.z);
+
+        // Update view bobbing from actual horizontal movement magnitude
+        viewBobbing.moveAmount = actualHoriz.magnitude;
     }
 
     public void Jump()
@@ -332,7 +360,7 @@ public class PlayerMotor : MonoBehaviour
         // If jumping while sliding, stop the slide
         if (sliding)
         {
-            StopSlide();
+            StopSlideImmediate();
         }
     }
 #region Crouching and Sliding
@@ -360,12 +388,25 @@ public class PlayerMotor : MonoBehaviour
         if (!isGrounded) return;
 
         sliding = true;
+        // remember initial slide direction for consistent physics handling
+        Vector3 horiz = rb.velocity;
+        horiz.y = 0f;
+        if (horiz.sqrMagnitude > 0.01f)
+            slideDirection = horiz.normalized;
+        else
+            slideDirection = transform.forward;
         slideStartTime = Time.time;
         isCrouching = true;
         LerpCrouch = false; // snap to crouch height immediately
         if (capsule != null) capsule.height = originalCapsuleHeight * 0.5f;
         originalDrag = rb.drag;
-        rb.AddForce(transform.forward * slideImpulse, ForceMode.VelocityChange);
+        // disable MovePosition while sliding so physics (velocity) control movement
+        // movePositionEnabled = false;
+        // ensure slide impulse is applied immediately and replace small existing horizontal vel
+        Vector3 v = rb.velocity;
+        v.x = slideDirection.x * slideImpulse;
+        v.z = slideDirection.z * slideImpulse;
+        rb.velocity = v;
         rb.drag = slideDrag;
         // optional: play sprint/slide visuals
         if (SprintLines != null && !SprintLines.isPlaying) SprintLines.Play();
@@ -373,13 +414,64 @@ public class PlayerMotor : MonoBehaviour
 
     private void StopSlide()
     {
+        // Smoothly damp horizontal velocity over slideStopDuration
+        if (slideStopCoroutine != null)
+            StopCoroutine(slideStopCoroutine);
+        slideStopCoroutine = StartCoroutine(SmoothStopSlide());
+    }
+
+    // Immediate cleanup without modifying velocity (used when jumping)
+    private void StopSlideImmediate()
+    {
+        if (slideStopCoroutine != null)
+        {
+            StopCoroutine(slideStopCoroutine);
+            slideStopCoroutine = null;
+        }
         sliding = false;
         rb.drag = originalDrag;
         if (capsule != null) capsule.height = originalCapsuleHeight;
         isCrouching = false;
-        LerpCrouch = true; // lerp back to standing
+        LerpCrouch = true;
+        if (SprintLines != null && SprintLines.isPlaying && !isSprinting) SprintLines.Stop();
+        // sync MovePosition target to current velocity and re-enable MovePosition
+        Vector3 v = rb.velocity; v.y = 0f; targetHorizontalVelocity = v;
+        // movePositionEnabled = true;
+    }
+
+    private IEnumerator SmoothStopSlide()
+    {
+        sliding = false; // switch out of sliding state immediately for input
+        float t = 0f;
+        Vector3 startVel = rb.velocity;
+        Vector3 startHoriz = new Vector3(startVel.x, 0f, startVel.z);
+        rb.drag = originalDrag;
+        if (capsule != null) capsule.height = originalCapsuleHeight;
+        isCrouching = false;
+        LerpCrouch = true;
         // stop sprint visuals if not sprinting
         if (SprintLines != null && SprintLines.isPlaying && !isSprinting) SprintLines.Stop();
+
+        while (t < slideStopDuration)
+        {
+            if (rb == null) break;
+            t += Time.deltaTime;
+            float f = 1f - (t / slideStopDuration);
+            f = Mathf.Clamp01(f);
+            Vector3 horiz = startHoriz * (f * slideStopMultiplier + (1f - slideStopMultiplier));
+            // preserve vertical
+            float vy = rb.velocity.y;
+            rb.velocity = new Vector3(horiz.x, vy, horiz.z);
+            targetHorizontalVelocity = new Vector3(horiz.x, 0f, horiz.z);
+            yield return null;
+        }
+
+        // final damping
+        Vector3 final = rb.velocity; final.x *= slideStopMultiplier; final.z *= slideStopMultiplier; rb.velocity = final;
+        targetHorizontalVelocity = new Vector3(final.x, 0f, final.z);
+        // re-enable MovePosition now that sliding motion is finished
+        // movePositionEnabled = true;
+        slideStopCoroutine = null;
     }
 
 #endregion
@@ -389,8 +481,13 @@ public class PlayerMotor : MonoBehaviour
         speed *= SprintMultiplier;
     }
 
+
     public void DoFov(float endvalue)
     {
+        if (Mathf.Approximately(currentFovTarget, endvalue)) return;
+
+        currentFovTarget = endvalue;
+        MainCam.DOKill();
         MainCam.DOFieldOfView(endvalue, 0.25f);
     }
 

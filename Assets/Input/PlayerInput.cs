@@ -71,6 +71,15 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Attack"",
+                    ""type"": ""Button"",
+                    ""id"": ""f766307e-a726-4301-906b-e0753f7e3852"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -329,8 +338,8 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
                 },
                 {
                     ""name"": """",
-                    ""id"": ""e23371de-9e41-4ca7-a1b8-096bf4cc0f16"",
-                    ""path"": ""<Gamepad>/rightStickPress"",
+                    ""id"": ""60895137-8f20-42f3-b0f8-3e249d4be2c6"",
+                    ""path"": ""<Gamepad>/buttonEast"",
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
@@ -340,12 +349,23 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
                 },
                 {
                     ""name"": """",
-                    ""id"": ""60895137-8f20-42f3-b0f8-3e249d4be2c6"",
-                    ""path"": ""<Gamepad>/buttonEast"",
+                    ""id"": ""880a1847-2e9a-44d4-b36d-7b4f438f3703"",
+                    ""path"": ""<Mouse>/leftButton"",
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""CrouchSlide"",
+                    ""action"": ""Attack"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""559ba0bf-c839-4a8b-806e-076625115afd"",
+                    ""path"": ""<Gamepad>/rightTrigger"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Attack"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -361,6 +381,7 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         m_OnFoot_Look = m_OnFoot.FindAction("Look", throwIfNotFound: true);
         m_OnFoot_Sprint = m_OnFoot.FindAction("Sprint", throwIfNotFound: true);
         m_OnFoot_CrouchSlide = m_OnFoot.FindAction("CrouchSlide", throwIfNotFound: true);
+        m_OnFoot_Attack = m_OnFoot.FindAction("Attack", throwIfNotFound: true);
     }
 
     public void Dispose()
@@ -427,6 +448,7 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
     private readonly InputAction m_OnFoot_Look;
     private readonly InputAction m_OnFoot_Sprint;
     private readonly InputAction m_OnFoot_CrouchSlide;
+    private readonly InputAction m_OnFoot_Attack;
     public struct OnFootActions
     {
         private @PlayerInput m_Wrapper;
@@ -436,6 +458,7 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         public InputAction @Look => m_Wrapper.m_OnFoot_Look;
         public InputAction @Sprint => m_Wrapper.m_OnFoot_Sprint;
         public InputAction @CrouchSlide => m_Wrapper.m_OnFoot_CrouchSlide;
+        public InputAction @Attack => m_Wrapper.m_OnFoot_Attack;
         public InputActionMap Get() { return m_Wrapper.m_OnFoot; }
         public void Enable() { Get().Enable(); }
         public void Disable() { Get().Disable(); }
@@ -460,6 +483,9 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
             @CrouchSlide.started += instance.OnCrouchSlide;
             @CrouchSlide.performed += instance.OnCrouchSlide;
             @CrouchSlide.canceled += instance.OnCrouchSlide;
+            @Attack.started += instance.OnAttack;
+            @Attack.performed += instance.OnAttack;
+            @Attack.canceled += instance.OnAttack;
         }
 
         private void UnregisterCallbacks(IOnFootActions instance)
@@ -479,6 +505,9 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
             @CrouchSlide.started -= instance.OnCrouchSlide;
             @CrouchSlide.performed -= instance.OnCrouchSlide;
             @CrouchSlide.canceled -= instance.OnCrouchSlide;
+            @Attack.started -= instance.OnAttack;
+            @Attack.performed -= instance.OnAttack;
+            @Attack.canceled -= instance.OnAttack;
         }
 
         public void RemoveCallbacks(IOnFootActions instance)
@@ -503,5 +532,6 @@ public partial class @PlayerInput: IInputActionCollection2, IDisposable
         void OnLook(InputAction.CallbackContext context);
         void OnSprint(InputAction.CallbackContext context);
         void OnCrouchSlide(InputAction.CallbackContext context);
+        void OnAttack(InputAction.CallbackContext context);
     }
 }
